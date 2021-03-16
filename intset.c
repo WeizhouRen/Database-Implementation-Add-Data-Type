@@ -70,7 +70,7 @@ intset_in(PG_FUNCTION_ARGS)
 	// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 	// 		errmsg("size is %d\nstrLen is %d\nstring is %s\n", size, strLen, debug)));
 
-	result = (IntSet *) palloc((size + 2) * sizeof(int32));
+	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 
 	result->size = size;
@@ -78,7 +78,7 @@ intset_in(PG_FUNCTION_ARGS)
 
 	
 	// free(debug);
-	// free(data);
+	free(data);
 	PG_RETURN_POINTER(result);
 }
 
@@ -190,7 +190,7 @@ intersection(PG_FUNCTION_ARGS)
 
 	data = get_intersection(setB->data, setB->size, setA->data, setA->size, &size);
 
-	result = (IntSet *) palloc((size + 2) * sizeof(int32));
+	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
@@ -211,7 +211,7 @@ union_set(PG_FUNCTION_ARGS)
 
 	data = get_union(setA->data, setA->size, setB->data, setB->size, &size);
 
-	result = (IntSet *) palloc((size + 2) * sizeof(int32));
+	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
@@ -233,7 +233,7 @@ disjunction(PG_FUNCTION_ARGS)
 
 	data = get_disjunction(setA->data, setA->size, setB->data, setB->size, &size);
 
-	result = (IntSet *) palloc((size + 2) * sizeof(int32));
+	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
@@ -254,7 +254,7 @@ difference(PG_FUNCTION_ARGS)
 
 	data = get_difference(setA->data, setA->size, setB->data, setB->size, &size);
 
-	result = (IntSet *) palloc((size + 2) * sizeof(int32));
+	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
@@ -309,6 +309,86 @@ bool is_valid_input(char *str) {
 int32 *get_data(char *str, int32 *size) {
 
 	int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0, num = 0, tmpSize = 0, *data = NULL, pos = 0;
+	char *numsWithZero = NULL, *subStr = NULL, *token = NULL, *subToken = NULL;
+	// Remove leading and tailing spaces
+	while (isspace(str[i])) i++;
+	while (isspace(str[j])) j--;
+
+	// Remove brackets
+	i++;
+	j--;
+	subLen = j - i + 1;
+	subStr = malloc((subLen + 1) * sizeof(char));
+	memcpy(subStr, &str[i], subLen);
+	subStr[subLen] = '\0';
+
+	// Remove internal spaces
+	for (i = 0; i < subLen; i++) {
+		if (subStr[i] != ' ')
+			subStr[n++] = subStr[i];
+	}
+	numsWithZero = malloc((n + 1) * sizeof(char));
+	memcpy(numsWithZero, &subStr[0], n);
+	numsWithZero[n] = '\0';
+
+	// Remove leading zeros and fill data array
+	token = strtok(numsWithZero, ",");
+	while (token != NULL) {
+		// i = 0;
+		// while (token[i] == '0') i++;
+		// if (i == strlen(token)) subTokenLen = 1;
+		// else subTokenLen = strlen(token) - i;
+		// subToken = malloc(sizeof(char) * subTokenLen);
+		// memcpy(subToken, &token[i], subTokenLen);
+		i = 0;
+		while (token[i] == '0') i++;
+		if (i >= strlen(token)) subTokenLen = 1;
+		else subTokenLen = strlen(token) - i;
+		subToken = malloc(sizeof(char) * (subTokenLen + 1));
+		memcpy(subToken, &token[i], subTokenLen);
+		subToken[subTokenLen] = '\0';
+		// subTokenLen--;
+		
+		num = atoi(subToken);
+		// ereport(ERROR,
+		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+		// 		errmsg("first num: %d\n", subTokenLen)));
+		// free(subToken);
+
+		if (tmpSize == 0) {	// add first num to array
+			data = malloc(sizeof(int32));
+			data[tmpSize++] = num;
+		} else {
+			// if num already exist in array, jump to next turn
+			if (num_exist(data, num, tmpSize)) {
+				token = strtok(NULL, ",");
+				continue;
+			}
+			// otherwise find expected position to insert
+			
+			pos = find_insert_pos(data, num, tmpSize);
+			data = insert_num(data, ++tmpSize, num, pos);
+		}
+		// numsLen += subTokenLen + 1; // 1 stand for comma
+		// data = tmpData;	
+		// ereport(ERROR,
+		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+		// 		errmsg("subtoken %d\n", subTokenLen)));
+		token = strtok(NULL, ",");
+	}
+	
+
+	*size = tmpSize;
+	
+	free(token);
+	free(subToken);
+	free(subStr);
+	free(numsWithZero);
+	
+	return data;
+	
+	
+	/* int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0, num = 0, tmpSize = 0, *data = NULL, pos = 0;
 	char *numsWithZero = NULL, *subStr = NULL, *token = NULL, *subToken = NULL;
 	// Remove leading and tailing spaces
 	while (isspace(str[i])) i++;
@@ -390,7 +470,7 @@ int32 *get_data(char *str, int32 *size) {
 	// free(subStr);
 	// free(numsWithZero);
 	
-	return data;
+	return data; */
 }
 
 bool num_exist(int32 *data, int32 target, int32 size) {
@@ -422,7 +502,7 @@ int32 *insert_num(int32 *data, int32 size, int32 num, int32 pos) {
 	// int32 *newData;
 	data = realloc(data, sizeof(int32) * size);
 
-	for (int32 i = size - 1; i > pos; i--) {
+	for (int i = size - 1; i > pos; i--) {
 		data[i] = data[i - 1];
 	}
 	data[pos] = num;
