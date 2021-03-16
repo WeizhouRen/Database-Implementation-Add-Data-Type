@@ -273,14 +273,39 @@ difference(PG_FUNCTION_ARGS)
  * @return boolean
  */
 bool is_valid_input(char *str) {
-	int i = 0, j = strlen(str) - 1, s = 0, x = 0;
-	char *numList, *token;
-	while (isspace(str[i])) i++;
-	while (isspace(str[j])) j--;
+	int i = 0, j = strlen(str) - 1, s = 0;
+	char *numList, *token, *listWithSpace;
+	bool onlySpace = false;
+	while (i < strlen(str) && isspace(str[i])) i++;
+	while (j >= 0 && isspace(str[j])) j--;
 	if (str[i] != '{' || str[j] != '}') return false;
 	i++;
 	j--;
-	for (;x < strlen(str); x++) {
+
+	listWithSpace = malloc((j - i  + 2) * sizeof(char));
+    memcpy(listWithSpace, &str[i], j - i + 1);
+    listWithSpace[j - i + 1] = '\0';
+
+	
+	token = strtok(listWithSpace, ",");
+	while (token != NULL) {
+		// trim token
+		i = 0, j = strlen(token) - 1;
+		while (i < strlen(token) && isspace(token[i])) i++;
+		while (j >= 0 && isspace(token[j])) j--;
+		if (onlySpace) return false;
+		if (j == -1) {
+			onlySpace = true;
+		};
+		for (int x = i; x < j; x++) {
+			if (!isdigit(token[x])) return false;
+		}
+		token = strtok(NULL, ",");
+	}
+
+
+	// remove internal space
+	for (int x = 0;x < strlen(str); x++) {
 		if (str[x] != ' ') str[s++] = str[x];
 	}
 	str[s] = '\0';
