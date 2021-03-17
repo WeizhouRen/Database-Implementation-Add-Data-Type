@@ -10,22 +10,20 @@
 #include "postgres.h"
 #include "fmgr.h"
 #include "libpq/pqformat.h"		/* needed for send/recv functions */
-#include "stdint.h"
 
 PG_MODULE_MAGIC;
 
 typedef struct IntSet
 {
-	int32		length; // struct length
-	int32		size;	// array size
-	// char		nums[FLEXIBLE_ARRAY_MEMBER]; // list of num in string format
-	int32		data[FLEXIBLE_ARRAY_MEMBER]; // actual length of the data part is not specified
+	int32		length;                         // struct length
+	int32		size;	                        // array size
+	int32		data[FLEXIBLE_ARRAY_MEMBER];    // actual length of the data part is not specified
 } IntSet;
 
-// FUNCTION DECLARATIONS
-
+/*****************************************************************************
+ * Helper functions declaration
+ *****************************************************************************/
 bool is_valid_input(char *str);
-char *extract_nums(char *str);
 int32 get_num_length(int32 num);
 int32 *get_data(char *str, int32 *size);
 char *to_string(int32 *data, int32 size); 
@@ -46,49 +44,43 @@ int32 *get_difference(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int3
 
 PG_FUNCTION_INFO_V1(intset_in);
 
-	Datum
+Datum
 intset_in(PG_FUNCTION_ARGS)
 {
 	char	*str = PG_GETARG_CSTRING(0);
-	int32 	size = 0;			// size of array
-	int32 	*data = NULL;
-	IntSet	*result;			// result of IntSet to be stored
-	// char 	*debug;
-
-	
+	int32 	size = 0;       // size of array
+	int32 	*data = NULL;   // integer array
+    IntSet	*result;        // result of IntSet to be stored
+    
+    // Input validation
 	if (!is_valid_input(str))
 		ereport(ERROR,
 			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				errmsg("invalid input syntax for type %s: \"%s\"",
 					"intset", str)));
 
-	// Get list of numbers
+	// Get array of integer
 	data = get_data(str, &size);
 
-
+    // Setup result
 	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
 
-	
-	// free(debug);
 	free(data);
 	PG_RETURN_POINTER(result);
 }
 
 PG_FUNCTION_INFO_V1(intset_out);
 
-	Datum
+Datum
 intset_out(PG_FUNCTION_ARGS)
 {
 	IntSet    *intSet = (IntSet *) PG_GETARG_POINTER(0);
 	char	  *result;
-	// result = to_string(intSet->data, intSet->size);
 	result = to_string(intSet->data, intSet->size);
-	//	result = psprintf("{%d}", intSet->data[0]);
-	//	result = psprintf("{%d,%d}", intSet->length, intSet->size);
 	PG_RETURN_CSTRING(result);
 }
 
@@ -263,10 +255,8 @@ difference(PG_FUNCTION_ARGS)
  * Helper functions
  *****************************************************************************/
 
-/**
+/*
  * Check if the input is valid
- * @param string
- * @return boolean
  */
 bool is_valid_input(char *str) {
 	int i = 0, j = strlen(str) - 1, s = 0;
@@ -282,7 +272,6 @@ bool is_valid_input(char *str) {
     memcpy(listWithSpace, &str[i], j - i + 1);
     listWithSpace[j - i + 1] = '\0';
 
-	
 	token = strtok(listWithSpace, ",");
 	while (token != NULL) {
 		// trim token
@@ -299,15 +288,15 @@ bool is_valid_input(char *str) {
 		token = strtok(NULL, ",");
 	}
 
-
 	// remove internal space
 	for (int x = 0;x < strlen(str); x++) {
 		if (str[x] != ' ') str[s++] = str[x];
 	}
 	str[s] = '\0';
-
 	if (strstr(str, ",,")) return false;
 	if (strcmp(str, "{}") == 0) return true;
+    
+    // remove braces
 	numList = malloc((s - 1) * sizeof(char));
 	memcpy(numList, &str[1], s - 2);
 	numList[s - 2] = '\0';
@@ -326,10 +315,13 @@ bool is_valid_input(char *str) {
 	return true;
 }
 
-
+/*
+ * Get integer array from input string
+ */
 int32 *get_data(char *str, int32 *size) {
 
-	int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0, num = 0, tmpSize = 0, *data = NULL, pos = 0;
+	int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0,
+        num = 0, tmpSize = 0, *data = NULL, pos = 0;
 	char *numsWithZero = NULL, *subStr = NULL, *token = NULL, *subToken = NULL;
 	// Remove leading and tailing spaces
 	while (isspace(str[i])) i++;
@@ -355,12 +347,6 @@ int32 *get_data(char *str, int32 *size) {
 	// Remove leading zeros and fill data array
 	token = strtok(numsWithZero, ",");
 	while (token != NULL) {
-		// i = 0;
-		// while (token[i] == '0') i++;
-		// if (i == strlen(token)) subTokenLen = 1;
-		// else subTokenLen = strlen(token) - i;
-		// subToken = malloc(sizeof(char) * subTokenLen);
-		// memcpy(subToken, &token[i], subTokenLen);
 		i = 0;
 		while (token[i] == '0') i++;
 		if (i >= strlen(token)) subTokenLen = 1;
@@ -368,15 +354,10 @@ int32 *get_data(char *str, int32 *size) {
 		subToken = malloc(sizeof(char) * (subTokenLen + 1));
 		memcpy(subToken, &token[i], subTokenLen);
 		subToken[subTokenLen] = '\0';
-		// subTokenLen--;
-		
-		num = atoi(subToken);
-		// ereport(ERROR,
-		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-		// 		errmsg("first num: %d\n", subTokenLen)));
-		// free(subToken);
-
-		if (tmpSize == 0) {	// add first num to array
+    
+        num = atoi(subToken);
+        // add first integer to array
+		if (tmpSize == 0) {
 			data = malloc(sizeof(int32));
 			data[tmpSize++] = num;
 		} else {
@@ -390,110 +371,22 @@ int32 *get_data(char *str, int32 *size) {
 			pos = find_insert_pos(data, num, tmpSize);
 			data = insert_num(data, ++tmpSize, num, pos);
 		}
-		// numsLen += subTokenLen + 1; // 1 stand for comma
-		// data = tmpData;	
-		// ereport(ERROR,
-		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-		// 		errmsg("subtoken %d\n", subTokenLen)));
 		token = strtok(NULL, ",");
 	}
 	
-
 	*size = tmpSize;
-	
 	free(token);
 	free(subToken);
 	free(subStr);
 	free(numsWithZero);
 	
 	return data;
-	
-	
-	/* int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0, num = 0, tmpSize = 0, *data = NULL, pos = 0;
-	char *numsWithZero = NULL, *subStr = NULL, *token = NULL, *subToken = NULL;
-	// Remove leading and tailing spaces
-	while (isspace(str[i])) i++;
-	while (isspace(str[j])) j--;
-
-	// Remove brackets
-	i++;
-	j--;
-	subLen = j - i + 2;
-	subStr = malloc(subLen * sizeof(char));
-	memcpy(subStr, &str[i], subLen - 1);
-	subStr[subLen - 1] = '\0';
-
-	// Remove internal spaces
-	for (i = 0; i < subLen - 1; i++) {
-		if (subStr[i] != ' ')
-			subStr[n++] = subStr[i];
-	}
-	numsWithZero = malloc((n + 1) * sizeof(char));
-	memcpy(numsWithZero, &subStr[0], n);
-	numsWithZero[n] = '\0';
-	free(subStr);
-
-	// Remove leading zeros and fill data array
-	token = strtok(numsWithZero, ",");
-	while (token != NULL) {
-		// i = 0;
-		// while (token[i] == '0') i++;
-		// if (i == strlen(token)) subTokenLen = 1;
-		// else subTokenLen = strlen(token) - i;
-		// subToken = malloc(sizeof(char) * subTokenLen);
-		// memcpy(subToken, &token[i], subTokenLen);
-		i = 0;
-		while (token[i] == '0') i++;
-		if (i >= strlen(token)) subTokenLen = 1;
-		else subTokenLen = strlen(token) - i;
-		subToken = malloc(sizeof(char) * subTokenLen);
-		memcpy(subToken, &token[i], subTokenLen);
-		// subToken[subTokenLen - 1] = '\0';
-		// subTokenLen--;
-		
-		num = atoi(subToken);
-		// ereport(ERROR,
-		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-		// 		errmsg("first num: %d\n", subTokenLen)));
-		// free(subToken);
-
-		if (tmpSize == 0) {	// add first num to array
-			data = malloc(sizeof(int32));
-			data[tmpSize++] = num;
-		} else {
-			// if num already exist in array, jump to next turn
-			if (num_exist(data, num, tmpSize)) {
-				token = strtok(NULL, ",");
-				continue;
-			}
-			// otherwise find expected position to insert
-			
-			pos = find_insert_pos(data, num, tmpSize);
-			data = insert_num(data, ++tmpSize, num, pos);
-		}
-		// data = tmpData;	
-		// ereport(ERROR,
-		// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-		// 		errmsg("subtoken %d\n", subTokenLen)));
-		token = strtok(NULL, ",");
-	}
-	
-	// numStr = malloc(sizeof(char) * numsLen);
-	
-	// for (int j = 0; j < tmpSize; j++) {
-	// 	sprintf(numStr, "%s,%d", numStr, data[i]);
-	// }
-	
-	*size = tmpSize;
-	
-	
-
-	// free(subStr);
-	// free(numsWithZero);
-	
-	return data; */
 }
 
+/*
+ * Check if the integer has been in the array
+ * Searching the number by binary search
+ */
 bool num_exist(int32 *data, int32 target, int32 size) {
 	int32 l = 0, r = size - 1, m;
 
@@ -506,6 +399,9 @@ bool num_exist(int32 *data, int32 target, int32 size) {
 	return false;
 }
 
+/*
+ * Find the position where the number should be
+ */
 int32 find_insert_pos(int32 *data, int32 target, int32 size) {
 	int32 l = 0, r = size - 1, m;
 
@@ -517,10 +413,12 @@ int32 find_insert_pos(int32 *data, int32 target, int32 size) {
 	return l;
 }
 
-
+/*
+ * Insert the number into array according to the position found before
+ * Each cell after the position moves one cell backward
+ */
 int32 *insert_num(int32 *data, int32 size, int32 num, int32 pos) {
 	
-	// int32 *newData;
 	data = realloc(data, sizeof(int32) * size);
 
 	for (int i = size - 1; i > pos; i--) {
@@ -530,49 +428,9 @@ int32 *insert_num(int32 *data, int32 size, int32 num, int32 pos) {
 	return data;
 }
 
-/* int32 *get_num_array(char *nums, int32 *size) {
-	char *token, *subToken;
-	int32 i = 0, 
-		subTokenLen = 0,
-		num = 0,
-		pos = 0,
-		tmpSize = 0,
-		*data = NULL;
-		// *tmpData = NULL;
-
-	token = strtok(nums, ",");
-	while (token != NULL) {
-		i = 0;
-		while (token[i] == 0) i++;
-		subTokenLen = strlen(token) - i + 1;
-		subToken = malloc(sizeof(char) * subTokenLen);
-		memcpy(subToken, &token[i], subTokenLen - 1);
-		subToken[subTokenLen - 1] = '\0';
-		num = atoi(subToken);
-		free(subToken);
-		if (tmpSize == 0) {	// add first num to array
-			data = malloc(sizeof(int32));
-			data[tmpSize++] = num;
-		} else {
-			// if num already exist in array, jump to next turn
-			if (num_exist(data, num, tmpSize)) {
-				token = strtok(NULL, ",");
-				continue;
-			}
-			// otherwise find expected position to insert
-			pos = find_insert_pos(data, num, tmpSize);
-			data = insert_num(data, ++tmpSize, num, pos);
-		}
-		// data = tmpData;	
-		token = strtok(NULL, ",");
-	}
-	free(token);
-	
-	*size = tmpSize;
-	return data;
-}
+/*
+ * Count number of digit of the integer
  */
-
 int32 get_num_length(int32 num) {
 	int32 count = 0;
 	if (num == 0) return 1;
@@ -584,6 +442,9 @@ int32 get_num_length(int32 num) {
 	return count;
 }
 
+/*
+ * Convert the integer array to string
+ */
 char *to_string(int32 *data, int32 size) {
 
 	char *str = NULL;
@@ -594,61 +455,21 @@ char *to_string(int32 *data, int32 size) {
 	for (int i = 0; i < size; i++) {
 		len += get_num_length(data[i]);
 	}
-	// ereport(ERROR,
-	// 		(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-	// 			errmsg("size: %d\nlen: %d", size, len)));
 
 	str = malloc(sizeof(char) * (len + 1));
-	
 	strcpy(str, "{");
 	for (int i = 0; i < size; i++) {
 		sprintf(str, "%s%d,", str, data[i]);
 	}
-	// memcpy(str, &)
 	str[len - 1] = '}';
 	str[len] = '\0';
 	return str;
-
-	// char *str = NULL;
-
-	// str = malloc(sizeof(char) * (strLen + 2)); // 2 stand for brackets
-	// // ereport(ERROR,
-	// // 		(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-	// // 			errmsg("strLen: %d\n", strLen)));
-	// strcpy(str, "{");
-	// for (int i = 0; i < size; i++) {
-	// 	sprintf(str, "%s%d,", str, data[i]);
-	// }
-	// str[strLen + 1] = '}';
-	// return str;
-
-
-
-	// // char *num = NULL;
-	// if (size == 0) {
-	// 	output = malloc(sizeof(char) * 2);
-	// 	strcpy(output, "{}");
-	// } else {
-	// 	output = malloc(sizeof(char) * (size + size - 1 + 2 + 1));
-	// 	strcpy(output, "{");				// starting with left bracket
-	// 	for (int i = 0; i < size; i++) {	// iterate data to concat string
-	// 		sprintf(output, "%s%d,", output, data[i]);
-	// 		// strcat(output, );
-	// 	}
-	// 	output[strlen(output) - 1] = '}';	// reaplce with right bracket
-	// 	// output[2 * size] = '}';
-	// 	// output[2 * size + 1] = '\0';
-	// }
-	// // free(num);
-	// return output;
 }
 
-/**
+/*
  * Check if intSet A contain all the values in intSet B
  * for every element of B, it is an element of A
  * i.e. A >@ B
- * 
- * @return bool
  */
 bool is_subset(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB) {
 	for (int i = 0; i < sizeB; i++) {
@@ -658,6 +479,9 @@ bool is_subset(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB) {
 	return true;
 }
 
+/*
+ * Check whether two intSets are the same
+ */
 bool is_equal(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB) {
 	if (sizeA != sizeB) return false;
 	for (int i = 0; i < sizeA; i++) {
@@ -666,8 +490,12 @@ bool is_equal(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB) {
 	return true;
 }
 
-int32 *get_intersection(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int32 *newSize) {
-	int32 *intersection = NULL, size = 0;//, strLen = 0;
+/*
+ * Iterate setA, if number exists in setB, add the number into intersection set
+ */
+int32 *get_intersection(int32 *dataA, int32 sizeA,
+                        int32 *dataB, int32 sizeB, int32 *newSize) {
+	int32 *intersection = NULL, size = 0;
 
 	for (int i = 0; i < sizeA; i++) {
 		if (!num_exist(dataB, dataA[i], sizeB)) continue;
@@ -676,16 +504,21 @@ int32 *get_intersection(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, in
 			intersection[size++] = dataA[i];
 		} else {
 			size++;
-			intersection = insert_num(intersection, size, dataA[i], size - 1);
+			intersection =
+                    insert_num(intersection, size, dataA[i], size - 1);
 		}
 	}
 	*newSize = size;
-	//*newStrLen = strLen;
 	return intersection;
 }
 
-int32 *get_union(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int32 *newSize) {
-	int32 size = sizeB, *unionSet, pos;
+/*
+ * Get union set, copy setA into union set and check each number in
+ * setB. Add number in setB which is not in current union set.
+ */
+int32 *get_union(int32 *dataA, int32 sizeA,
+                 int32 *dataB, int32 sizeB, int32 *newSize) {
+	int32 size = sizeB, *unionSet = NULL, pos = 0;
 	unionSet = malloc(sizeof(int32) * size);
 	for (int j = 0; j < sizeB; j++) {
 		unionSet[j] = dataB[j];
@@ -701,18 +534,17 @@ int32 *get_union(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int32 *ne
 	return unionSet;
 }
 
-int32 *get_disjunction(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int32 *newSize) {
-	int32 interSize = 0, unionSize = 0, size = 0;
-	int32 *interSet, *unionSet, *disSet = NULL;
-	// char *uni;
-	interSet = get_intersection(dataA, sizeA, dataB, sizeB, &interSize);
-	
+/*
+ * Get disjunction set by minus intersection from union. If number
+ * is in intersection set, jump to next number in union set.
+ */
+int32 *get_disjunction(int32 *dataA, int32 sizeA,
+                       int32 *dataB, int32 sizeB, int32 *newSize) {
+	int32 interSize = 0, unionSize = 0, size = 0,
+        *interSet = NULL, *unionSet = NULL, *disSet = NULL;
+    
+    interSet = get_intersection(dataA, sizeA, dataB, sizeB, &interSize);
 	unionSet = get_union(dataA, sizeA, dataB, sizeB, &unionSize);
-	// uni = to_string(unionSet, unionSize);
-	// ereport(ERROR,
-	// 			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-	// 				errmsg("union: %s\n", uni)));
-
 	for(int i = 0; i < unionSize; i++) {
 		if (num_exist(interSet, unionSet[i], interSize)) continue;
 		if (size == 0) {
@@ -727,7 +559,11 @@ int32 *get_disjunction(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int
 	return disSet;
 }
 
-int32 *get_difference(int32 *dataA, int32 sizeA, int32 *dataB, int32 sizeB, int32 *newSize) {
+/*
+ * Iterate through setA, if number is not in setB, add into difSet.
+ */
+int32 *get_difference(int32 *dataA, int32 sizeA,
+                      int32 *dataB, int32 sizeB, int32 *newSize) {
 	int32 size = 0, *diffSet = NULL;
 
 	for(int i = 0; i < sizeA; i++) {

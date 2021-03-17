@@ -1,4 +1,4 @@
--- CREATE TYPE intSet;
+-- create type and functions
 
 CREATE FUNCTION intset_in(cstring)
    RETURNS intset
@@ -121,30 +121,6 @@ CREATE OPERATOR - (
    commutator = -
 );
 
--- CREATE FUNCTION intSet_
-
--- create the support function too
--- CREATE FUNCTION complex_abs_cmp(complex, complex) RETURNS int4
---   AS '_OBJWD_/complex' LANGUAGE C IMMUTABLE STRICT;
-
--- now we can make the operator class
-
-
--- now, we can define a btree index on intSet types. First, let's populate
--- the table. Note that postgres needs many more tuples to start using the
--- btree index during selects.
-
--- INSERT INTO DBSystems VALUES ('(56.0,-22.5)', '(-43.2,-0.07)');
--- INSERT INTO DBSystems VALUES ('(-91.9,33.6)', '(8.6,3.0)');
-
--- CREATE INDEX test_cplx_ind ON test_complex
---   USING btree(a complex_abs_ops);
-
--- SELECT * from test_complex where a = '(56.0,-22.5)';
--- SELECT * from test_complex where a < '(56.0,-22.5)';
--- SELECT * from test_complex where a > '(56.0,-22.5)';
-
-
 -- clean up the example
--- DROP TABLE test_complex;
--- DROP TYPE complex CASCADE;
+-- DROP TABLE test_intset;
+-- DROP TYPE intset CASCADE;
