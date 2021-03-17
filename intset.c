@@ -65,10 +65,6 @@ intset_in(PG_FUNCTION_ARGS)
 	// Get list of numbers
 	data = get_data(str, &size);
 
-	// debug = to_string(data, size, strLen);
-	// ereport(ERROR,
-	// 	(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-	// 		errmsg("size is %d\nstrLen is %d\nstring is %s\n", size, strLen, debug)));
 
 	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
@@ -312,7 +308,7 @@ bool is_valid_input(char *str) {
 
 	if (strstr(str, ",,")) return false;
 	if (strcmp(str, "{}") == 0) return true;
-	numList = malloc((s - 2) * sizeof(char));
+	numList = malloc((s - 1) * sizeof(char));
 	memcpy(numList, &str[1], s - 2);
 	numList[s - 2] = '\0';
 	if (!isdigit(numList[0]) || !isdigit(numList[s - 3])) return false;
