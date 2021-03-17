@@ -23,9 +23,11 @@ typedef struct IntSet
 /*****************************************************************************
  * Helper functions declaration
  *****************************************************************************/
-bool is_valid_input(char *str);
+// bool is_valid_input(char *str);
+bool is_valid_input(char *str, char **newNumList); 
 int32 get_num_length(int32 num);
-int32 *get_data(char *str, int32 *size);
+int32 *get_data(char *numList, int32 *size); 
+// int32 *get_data(char *str, int32 *size);
 char *to_string(int32 *data, int32 size); 
 int32 find_insert_pos(int32 *data, int32 target, int32 size);
 bool num_exist(int32 *data, int32 target, int32 size);
@@ -48,27 +50,29 @@ Datum
 intset_in(PG_FUNCTION_ARGS)
 {
 	char	*str = PG_GETARG_CSTRING(0);
-	int32 	size = 0;       // size of array
-	int32 	*data = NULL;   // integer array
-    IntSet	*result;        // result of IntSet to be stored
-    
-    // Input validation
-	if (!is_valid_input(str))
+	int32 	size = 0;       	// size of array
+	int32 	*data = NULL;   	// integer array
+	char	*numList = NULL;	// number of list separate by comma without curly braces
+    	IntSet	*result;  	      	// result of IntSet to be stored
+    	
+	
+   	// Input validation
+	if (!is_valid_input(str, &numList))
 		ereport(ERROR,
 			(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 				errmsg("invalid input syntax for type %s: \"%s\"",
 					"intset", str)));
 
 	// Get array of integer
-	data = get_data(str, &size);
-
-    // Setup result
+	data = get_data(numList, &size);
+	
+    	// Setup result
 	result = (IntSet *) malloc((size + 2) * sizeof(int32));
 	SET_VARSIZE(result, (size + 2) * sizeof(int32));
 
 	result->size = size;
 	memcpy(result->data, data, size * sizeof(int32));
-
+	free(numList);
 	free(data);
 	PG_RETURN_POINTER(result);
 }
@@ -258,7 +262,7 @@ difference(PG_FUNCTION_ARGS)
 /*
  * Check if the input is valid
  */
-bool is_valid_input(char *str) {
+bool is_valid_input(char *str, char **newNumList) {
 	int i = 0, j = strlen(str) - 1, s = 0;
 	char *numList, *token, *listWithSpace;
 	bool onlySpace = false;
@@ -269,8 +273,8 @@ bool is_valid_input(char *str) {
 	j--;
 
 	listWithSpace = malloc((j - i  + 2) * sizeof(char));
-    memcpy(listWithSpace, &str[i], j - i + 1);
-    listWithSpace[j - i + 1] = '\0';
+    	memcpy(listWithSpace, &str[i], j - i + 1);
+    	listWithSpace[j - i + 1] = '\0';
 
 	token = strtok(listWithSpace, ",");
 	while (token != NULL) {
@@ -296,10 +300,14 @@ bool is_valid_input(char *str) {
 	if (strstr(str, ",,")) return false;
 	if (strcmp(str, "{}") == 0) return true;
     
-    // remove braces
+   	// remove braces
 	numList = malloc((s - 1) * sizeof(char));
 	memcpy(numList, &str[1], s - 2);
 	numList[s - 2] = '\0';
+	
+	*newNumList = malloc(sizeof(char) * (s - 1));
+	strcpy(*newNumList, numList);
+
 	if (!isdigit(numList[0]) || !isdigit(numList[s - 3])) return false;
 
 	token = strtok(numList, ",");
@@ -318,34 +326,11 @@ bool is_valid_input(char *str) {
 /*
  * Get integer array from input string
  */
-int32 *get_data(char *str, int32 *size) {
+int32 *get_data(char *numList, int32 *size) {
 
-	int32 i = 0, j = strlen(str) - 1, n = 0, subLen = 0, subTokenLen = 0,
-        num = 0, tmpSize = 0, *data = NULL, pos = 0;
-	char *numsWithZero = NULL, *subStr = NULL, *token = NULL, *subToken = NULL;
-	// Remove leading and tailing spaces
-	while (isspace(str[i])) i++;
-	while (isspace(str[j])) j--;
-
-	// Remove brackets
-	i++;
-	j--;
-	subLen = j - i + 1;
-	subStr = malloc((subLen + 1) * sizeof(char));
-	memcpy(subStr, &str[i], subLen);
-	subStr[subLen] = '\0';
-
-	// Remove internal spaces
-	for (i = 0; i < subLen; i++) {
-		if (subStr[i] != ' ')
-			subStr[n++] = subStr[i];
-	}
-	numsWithZero = malloc((n + 1) * sizeof(char));
-	memcpy(numsWithZero, &subStr[0], n);
-	numsWithZero[n] = '\0';
-
-	// Remove leading zeros and fill data array
-	token = strtok(numsWithZero, ",");
+	int32 i = 0, tmpSize = 0, subTokenLen = 0, pos = 0, num = 0, *data = NULL;
+	char *token = NULL, *subToken = NULL;
+	token = strtok(numList, ",");
 	while (token != NULL) {
 		i = 0;
 		while (token[i] == '0') i++;
@@ -355,8 +340,8 @@ int32 *get_data(char *str, int32 *size) {
 		memcpy(subToken, &token[i], subTokenLen);
 		subToken[subTokenLen] = '\0';
     
-        num = atoi(subToken);
-        // add first integer to array
+        	num = atoi(subToken);
+        	// add first integer to array
 		if (tmpSize == 0) {
 			data = malloc(sizeof(int32));
 			data[tmpSize++] = num;
@@ -366,8 +351,7 @@ int32 *get_data(char *str, int32 *size) {
 				token = strtok(NULL, ",");
 				continue;
 			}
-			// otherwise find expected position to insert
-			
+			// otherwise find expected position to insert	
 			pos = find_insert_pos(data, num, tmpSize);
 			data = insert_num(data, ++tmpSize, num, pos);
 		}
@@ -377,9 +361,6 @@ int32 *get_data(char *str, int32 *size) {
 	*size = tmpSize;
 	free(token);
 	free(subToken);
-	free(subStr);
-	free(numsWithZero);
-	
 	return data;
 }
 
